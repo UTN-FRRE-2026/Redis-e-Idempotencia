@@ -1,0 +1,304 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>TP1 – Redis + Idempotencia</title>
+
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/reveal.js@5/dist/reveal.css">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/reveal.js@5/dist/theme/black.css">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/reveal.js@5/plugin/highlight/monokai.css">
+
+  <style>
+    :root {
+      --rojo: #E4572E;
+      --verde: #37B24D;
+      --azul: #4C9AFF;
+      --ink: #16233A;
+    }
+    .reveal { font-family: 'Segoe UI', Helvetica, Arial, sans-serif; }
+    .reveal h1, .reveal h2, .reveal h3 { text-transform: none; letter-spacing: 0; }
+    .reveal h1 { font-size: 2.1em; }
+    .reveal h2 { color: var(--azul); font-size: 1.6em; }
+    .reveal section { font-size: 0.9em; }
+    .reveal table { font-size: 0.78em; }
+    .reveal table th { color: var(--azul); }
+    .reveal code { border-radius: 6px; }
+    .reveal pre { width: 100%; font-size: 0.62em; box-shadow: none; }
+    .tag { display: inline-block; padding: 2px 12px; border-radius: 20px; font-size: 0.55em;
+           font-weight: 600; vertical-align: middle; }
+    .tag-cache { background: var(--azul); color: #fff; }
+    .tag-idem  { background: var(--verde); color: #fff; }
+    .ok  { color: var(--verde); font-weight: 700; }
+    .bad { color: var(--rojo);  font-weight: 700; }
+    .lead { color: #9fb3c8; }
+    .arch { background: #fff; border-radius: 12px; padding: 10px; }
+    .arch img { width: 100%; height: auto; display: block; }
+    .footnote { position: absolute; bottom: 12px; right: 24px; font-size: 0.45em; color: #6b7a90; }
+    .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; align-items: start; }
+    .card { background: rgba(255,255,255,0.05); border-left: 4px solid var(--azul);
+            border-radius: 8px; padding: 12px 16px; text-align: left; }
+    .card.idem { border-left-color: var(--verde); }
+    .big { font-size: 1.6em; font-weight: 700; }
+    .center-note { color: #9fb3c8; font-size: 0.8em; }
+  </style>
+</head>
+<body>
+<div class="reveal">
+  <div class="slides">
+
+    <!-- 1. Portada -->
+    <section data-background-color="#0d1b2a">
+      <h1>Redis (datos y caché)<br>+ Idempotencia y deduplicación</h1>
+      <p class="lead">Trabajo Práctico 1 — Sistemas Distribuidos</p>
+      <p style="margin-top:1.4em;font-size:0.8em">
+        Stabile Maximiliano · Jara Agostina · Sanchez Iván
+      </p>
+    </section>
+
+    <!-- 2. El problema -->
+    <section>
+      <h2>El problema</h2>
+      <p>Las aplicaciones no corren en un solo servidor: corren <strong>varias copias</strong>
+      del mismo servicio (réplicas) para aguantar carga y no caerse si una falla.</p>
+      <div class="grid2" style="margin-top:1em">
+        <div class="card">
+          <h3 style="color:var(--rojo)">1 · Lentitud</h3>
+          Si cada pedido va a la base de datos, todo se vuelve lento.
+        </div>
+        <div class="card idem">
+          <h3 style="color:var(--rojo)">2 · Pedidos repetidos</h3>
+          Si un cliente reintenta un pago, puede terminar pagando <strong>dos veces</strong>.
+        </div>
+      </div>
+      <p style="margin-top:1.2em" class="fragment">
+        <strong>Redis</strong> resuelve ambos: es una memoria <em>rápida y compartida</em>
+        por todas las réplicas.
+      </p>
+    </section>
+
+    <!-- 3. Arquitectura (imagen SVG) -->
+    <section data-background-color="#ffffff">
+      <div class="arch">
+        <img src="arquitectura.svg" alt="Arquitectura del sistema">
+      </div>
+      <p class="footnote">cliente → nginx (:8080) → api-1 / api-2 → Redis + Postgres</p>
+    </section>
+
+    <!-- 4. Componentes -->
+    <section>
+      <h2>Los componentes</h2>
+      <table>
+        <thead><tr><th>Servicio</th><th>Rol</th></tr></thead>
+        <tbody>
+          <tr><td><code>nginx</code></td><td>Balanceador round-robin; único puerto expuesto (8080)</td></tr>
+          <tr><td><code>api-1</code>, <code>api-2</code></td><td>Dos réplicas de la misma API (Node + TypeScript)</td></tr>
+          <tr><td><code>redis</code></td><td>Caché + claves de idempotencia (AOF activado)</td></tr>
+          <tr><td><code>postgres</code></td><td>Fuente de verdad (productos y pagos)</td></tr>
+        </tbody>
+      </table>
+      <p class="fragment center-note" style="margin-top:1em">
+        Cada réplica tiene su <strong>propia memoria</strong> y no comparten nada →
+        por eso el estado va en Redis.
+      </p>
+    </section>
+
+    <!-- 5. Qué es Redis -->
+    <section>
+      <h2>¿Qué es Redis?</h2>
+      <ul>
+        <li>Base de datos que guarda todo en <strong>memoria RAM</strong> → responde en &lt; 1 ms.</li>
+        <li>Funciona como un <strong>diccionario clave–valor</strong>: <code>producto:1 → {...}</code>.</li>
+        <li class="fragment"><strong>TTL:</strong> a cada clave le podés poner tiempo de vida; Redis la borra sola.</li>
+        <li class="fragment"><strong>Operaciones atómicas:</strong> se ejecutan de a una, sin que otra se meta en el medio.</li>
+        <li class="fragment"><strong>AOF:</strong> anota cada escritura en disco y la recupera al reiniciar.</li>
+      </ul>
+    </section>
+
+    <!-- 6. Tema 1: Caché -->
+    <section data-background-color="#12263a">
+      <span class="tag tag-cache">TEMA 1</span>
+      <h2 style="margin-top:0.3em">Caché con Redis</h2>
+      <p>Guardar una <strong>copia</strong> de un dato que se pide mucho, para no ir a la base cada vez.</p>
+      <div class="grid2" style="margin-top:0.8em">
+        <div class="card"><span class="ok">HIT</span> — el dato estaba en caché → respuesta instantánea (~5 ms)</div>
+        <div class="card"><span class="bad">MISS</span> — no estaba → se busca en la base (~500 ms) y se guarda copia</div>
+      </div>
+    </section>
+
+    <!-- 7. Patrón cache-aside -->
+    <section>
+      <h2>Patrón <em>cache-aside</em></h2>
+      <ol>
+        <li>La API busca en Redis → <code>GET producto:1</code></li>
+        <li>Si no está: consulta Postgres y guarda copia con TTL → <code>SET producto:1 ... EX 20</code></li>
+        <li>Al modificar (<code>PUT</code>): actualiza Postgres y <strong>borra</strong> la copia → <code>DEL producto:1</code></li>
+      </ol>
+      <p class="center-note fragment">
+        Se llama "caché al costado" porque la aplicación decide cuándo leer/escribir la caché;
+        la base no sabe que existe.
+      </p>
+    </section>
+
+    <!-- 8. Demo caché -->
+    <section>
+      <h2>Demo: caché <span class="tag tag-cache">01_cache</span></h2>
+      <table>
+        <thead><tr><th>Paso</th><th>Resultado</th></tr></thead>
+        <tbody>
+          <tr><td>1ª consulta</td><td><span class="bad">MISS</span> — 1431 ms (va a Postgres)</td></tr>
+          <tr><td>2ª y 3ª</td><td><span class="ok">HIT</span> — 6 ms y 4 ms, <strong>atendida por api-2</strong> (caché compartida)</td></tr>
+          <tr><td>PUT precio nuevo</td><td><code>EXISTS producto:1 → 0</code> (copia borrada)</td></tr>
+          <tr><td>Siguiente</td><td>MISS con precio nuevo → luego HIT (3 ms)</td></tr>
+          <tr><td>TTL 20 s</td><td>Redis borró la clave solo → vuelve a MISS</td></tr>
+        </tbody>
+      </table>
+      <p class="big ok" style="margin-top:0.6em">≈ 100× más rápido que ir a la base</p>
+    </section>
+
+    <!-- 9. Tema 2: Idempotencia -->
+    <section data-background-color="#122a1a">
+      <span class="tag tag-idem">TEMA 2</span>
+      <h2 style="margin-top:0.3em; color:var(--verde)">Idempotencia y deduplicación</h2>
+      <p>Una operación es <strong>idempotente</strong> si hacerla una o muchas veces
+      deja el mismo resultado.</p>
+      <div class="grid2" style="margin-top:0.8em">
+        <div class="card idem">Leer un producto ✅ — apretar el botón del ascensor ✅</div>
+        <div class="card idem" style="border-left-color:var(--rojo)"><strong>Cobrar NO</strong> ❌ — cada cobro repetido le saca plata al cliente</div>
+      </div>
+      <p class="center-note fragment" style="margin-top:0.8em">
+        Llegan repetidos por timeouts, doble clic, reintentos automáticos o colas "al menos una vez".
+      </p>
+    </section>
+
+    <!-- 10. Idempotency-Key -->
+    <section>
+      <h2>La <em>Idempotency-Key</em></h2>
+      <p>El cliente genera un identificador único (UUID) <strong>por cada pago</strong> y lo manda en el header.
+      Todos los reintentos llevan la misma clave.</p>
+      <p class="fragment">El servidor la anota y, si la vuelve a ver, <strong>no cobra de nuevo</strong>:
+      devuelve la misma respuesta de la primera vez.</p>
+      <p class="fragment center-note">Es el mismo mecanismo que usan pasarelas de pago reales, como <strong>Stripe</strong>.
+      La <strong>deduplicación</strong> es la misma idea aplicada a mensajes con ID.</p>
+    </section>
+
+    <!-- 11. Cómo funciona -->
+    <section>
+      <h2>Cómo funciona en la API</h2>
+      <pre><code data-trim data-noescape class="language-bash">
+POST /pagos  con  Idempotency-Key: abc
+
+SET idem:abc {"estado":"procesando"} NX EX 86400
+#          NX = "guardar solo si No eXiste"  (atómico)
+#          → si llegan 20 pedidos a la vez, SOLO UNO gana
+      </code></pre>
+      <ul style="font-size:0.82em">
+        <li>Si <strong>ganó</strong>: cobra, guarda en Postgres, marca la clave <code>completado</code> + respuesta.</li>
+        <li><code>procesando</code> → <span class="bad">409</span> "reintentá en unos segundos"</li>
+        <li><code>completado</code> → devuelve la respuesta guardada + header <code>Idempotent-Replayed</code></li>
+        <li>Misma clave con <strong>otros datos</strong> → <span class="bad">422</span> (error del cliente)</li>
+      </ul>
+    </section>
+
+    <!-- 12. Demo reintentos -->
+    <section>
+      <h2>Demo: reintentos <span class="tag tag-idem">02_idempotencia</span></h2>
+      <p class="center-note">El mismo pago enviado 3 veces, con la misma clave.</p>
+      <table>
+        <thead><tr><th>Modo</th><th>Qué pasa</th><th>Cobros</th></tr></thead>
+        <tbody>
+          <tr><td><code>off</code></td><td>Cada intento cobra</td><td class="bad">3 ❌</td></tr>
+          <tr><td><code>memoria</code></td><td>api-1 cobra; api-2 no sabe y cobra; el 3º vuelve a api-1</td><td class="bad">2 ❌</td></tr>
+          <tr><td><code>redis</code></td><td>api-2 ve la clave en Redis y devuelve la respuesta guardada</td><td class="ok">1 ✅</td></tr>
+        </tbody>
+      </table>
+    </section>
+
+    <!-- 13. Demo concurrencia -->
+    <section>
+      <h2>Demo: concurrencia <span class="tag tag-idem">03_concurrencia</span></h2>
+      <p class="center-note">20 pedidos <strong>simultáneos</strong> con la misma clave.</p>
+      <table>
+        <thead><tr><th>Modo</th><th>Resultado</th><th>Cobros</th></tr></thead>
+        <tbody>
+          <tr><td><code>memoria</code></td><td>Cada réplica deja pasar uno y rechaza el resto (409)</td><td class="bad">2 ❌</td></tr>
+          <tr><td><code>redis</code></td><td>Solo 1 de los 20 gana el <code>SET NX</code>; los otros 19 → 409</td><td class="ok">1 ✅</td></tr>
+        </tbody>
+      </table>
+      <p class="fragment center-note" style="margin-top:1em">
+        Verificación cruzada: el último pago tiene <code>id=9</code> = 3+2+1+2+1 cobros de las dos corridas.
+      </p>
+    </section>
+
+    <!-- 14. Redis se cae -->
+    <section data-background-color="#2a1212">
+      <h2 style="color:var(--rojo)">¿Y si Redis se cae? <span class="tag" style="background:#555">04_redis_caido</span></h2>
+      <div class="grid2" style="margin-top:0.8em">
+        <div class="card"><h3 class="ok">Caché → fail-open</h3>
+          Sin Redis las consultas van directo a Postgres. Más lento, pero <strong>funciona</strong>.</div>
+        <div class="card idem" style="border-left-color:var(--rojo)"><h3 class="bad">Pagos → fail-closed</h3>
+          Se rechazan con <strong>503</strong> antes que arriesgar un cobro doble.</div>
+      </div>
+      <p class="fragment" style="margin-top:1em">
+        Un pago hecho <em>antes</em> de la caída <strong>no se re-cobra</strong>: la clave sobrevivió
+        al reinicio gracias al <strong>AOF</strong> (Redis la había guardado en disco).
+      </p>
+    </section>
+
+    <!-- 15. Relación entre los temas -->
+    <section>
+      <h2>Los dos temas, un mismo Redis</h2>
+      <table>
+        <thead><tr><th></th><th class="tag-cache">Caché</th><th style="color:var(--verde)">Idempotencia</th></tr></thead>
+        <tbody>
+          <tr><td>Para qué</td><td>Copias de datos para leer rápido</td><td>Recordar operaciones ya hechas</td></tr>
+          <tr><td>Operación</td><td><code>GET</code> / <code>SET EX</code> / <code>DEL</code></td><td><code>SET NX EX</code> (atómico)</td></tr>
+          <tr><td>Si Redis cae</td><td class="ok">Fail-open: sigue, más lento</td><td class="bad">Fail-closed: rechaza</td></tr>
+          <tr><td>Si se pierde un dato</td><td>Nada, está en Postgres</td><td>Riesgo de duplicado → AOF</td></tr>
+        </tbody>
+      </table>
+      <p class="fragment center-note" style="margin-top:1em">
+        <strong>Idea común:</strong> el estado local por proceso no alcanza.
+        Lo vimos 3 veces: balanceo de nginx, caché e idempotencia.
+      </p>
+    </section>
+
+    <!-- 16. Conclusión -->
+    <section data-background-color="#0d1b2a">
+      <h2>Conclusión</h2>
+      <p>Redis resuelve ambos temas porque es una memoria <strong>compartida, rápida
+      y con operaciones atómicas</strong> (<code>SET NX</code>).</p>
+      <p class="fragment">Pero no es gratis: es otra pieza que se puede caer, vive en RAM
+      y sus copias pueden quedar desactualizadas.</p>
+      <p class="fragment">Por eso cada uso decide qué pasa cuando falla:
+      la caché sigue (solo cuesta velocidad); los pagos se frenan (un error cuesta plata).</p>
+      <p class="fragment big ok" style="margin-top:0.8em">
+        La idempotencia no evita que lleguen pedidos repetidos:<br>evita que <em>tengan efecto</em>.
+      </p>
+    </section>
+
+    <!-- 17. Cierre -->
+    <section data-background-color="#0d1b2a">
+      <h1>¡Gracias!</h1>
+      <p class="lead">Preguntas</p>
+      <p style="margin-top:1.4em;font-size:0.7em">
+        Stabile Maximiliano · Jara Agostina · Sanchez Iván
+      </p>
+    </section>
+
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/reveal.js@5/dist/reveal.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/reveal.js@5/plugin/highlight/highlight.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/reveal.js@5/plugin/notes/notes.js"></script>
+<script>
+  Reveal.initialize({
+    hash: true,
+    slideNumber: 'c/t',
+    transition: 'slide',
+    plugins: [ RevealHighlight, RevealNotes ]
+  });
+</script>
+</body>
+</html>
