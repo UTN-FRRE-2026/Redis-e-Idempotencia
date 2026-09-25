@@ -1,0 +1,26 @@
+$ node demo/02_idempotencia.mjs
+
+=== Modo "off": SIN protección ===
+Idempotency-Key: fec136c7-25a6-4d0f-b792-5ef56204e0e9
+Intento 1 → 201 | api-1 | 💰 PAGO PROCESADO (se cobró)
+Intento 2 → 201 | api-2 | 💰 PAGO PROCESADO (se cobró)
+Intento 3 → 201 | api-1 | 💰 PAGO PROCESADO (se cobró)
+Cobros en la base: 3 (total $45000) → ❌ ¡COBRO DUPLICADO!
+
+=== Modo "memoria": Idempotencia en MEMORIA LOCAL de cada réplica ===
+Idempotency-Key: a1ece056-2d2d-4de0-a968-54439aa44f55
+Intento 1 → 201 | api-1 | 💰 PAGO PROCESADO (se cobró)
+Intento 2 → 201 | api-2 | 💰 PAGO PROCESADO (se cobró)
+Intento 3 → 201 | api-1 | ↩  respuesta repetida (NO se cobró)
+Cobros en la base: 2 (total $30000) → ❌ ¡COBRO DUPLICADO!
+
+=== Modo "redis": Idempotencia en REDIS (compartido) ===
+Idempotency-Key: 9a177e8e-945d-489a-b21e-772b880421e0
+Intento 1 → 201 | api-1 | 💰 PAGO PROCESADO (se cobró)
+Intento 2 → 201 | api-2 | ↩  respuesta repetida (NO se cobró)
+Intento 3 → 201 | api-1 | ↩  respuesta repetida (NO se cobró)
+Cobros en la base: 1 (total $15000) → ✅ correcto
+
+=== ¿Qué guardó Redis para esa clave? ===
+{"estado":"completado","hash":"071f264c8be41cf2e789d74e6d30e68a711e25b7fb5133d66142e0a4cae96a5a","status":201,"respuesta":{"mensaje":"Pago procesado","pago":{"id":6,"cliente":"cliente-redis-1790304712060","monto":15000,"atendido_por":"api-1"}}}
+TTL: 86399 segundos (se recuerda 24 h)

@@ -1,0 +1,17 @@
+$ node demo/03_concurrencia.mjs
+
+=== Modo "memoria": 20 peticiones simultáneas con la misma clave ===
+ 9 x api-1 → ⏳ rechazado: el pago ya se está procesando
+ 1 x api-1 → 💰 PAGO PROCESADO (se cobró)
+ 9 x api-2 → ⏳ rechazado: el pago ya se está procesando
+ 1 x api-2 → 💰 PAGO PROCESADO (se cobró)
+Cobros en la base: 2 (api-1, api-2) → ❌ ¡COBRO DUPLICADO!
+
+=== Modo "redis": 20 peticiones simultáneas con la misma clave ===
+10 x api-1 → ⏳ rechazado: el pago ya se está procesando
+ 9 x api-2 → ⏳ rechazado: el pago ya se está procesando
+ 1 x api-2 → 💰 PAGO PROCESADO (se cobró)
+Cobros en la base: 1 (api-2) → ✅ correcto
+
+=== Un reintento más, cuando el pago ya terminó ===
+201 | api-1 | ↩  respuesta repetida (NO se cobró) | pago id=9
