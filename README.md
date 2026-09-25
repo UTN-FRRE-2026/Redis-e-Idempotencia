@@ -2,6 +2,16 @@
 
 **Integrantes:** Stabile Maximiliano, Jara Agostina, Sanchez Iván
 
+![Arquitectura](docs/arquitectura.png)
+
+## Documentación
+
+| Archivo | Contenido |
+|---|---|
+| [`docs/INFORME.md`](docs/INFORME.md) | Conceptos, decisiones, problemas encontrados, resultados y posibles preguntas |
+| [`docs/GUION.md`](docs/GUION.md) | Guion del coloquio minuto a minuto |
+| [`evidencias/`](evidencias/) | Capturas y salidas reales de la demo |
+
 ## Arquitectura
 
 ```
@@ -61,3 +71,4 @@ docker compose down -v                                  # apagar y BORRAR datos 
 | `demo/01_cache.mjs` | Caché: MISS vs HIT, caché compartida entre réplicas, TTL e invalidación (`--ttl` para ver el vencimiento) |
 | `demo/02_idempotencia.mjs` | Un cliente reintenta el mismo pago 3 veces: sin protección (3 cobros), memoria local (2 cobros) y Redis (1 cobro) |
 | `demo/03_concurrencia.mjs` | 20 peticiones simultáneas con la misma clave: memoria local (2 cobros) vs Redis (1 cobro) |
+| `demo/04_redis_caido.mjs` | Apaga Redis: la caché sigue funcionando (fail-open), los pagos se rechazan (fail-closed) y al volver la clave sigue ahí (AOF) |

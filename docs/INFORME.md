@@ -1,7 +1,7 @@
 # Informe TP1 – Redis (datos y caché) + Idempotencia y deduplicación
 
 **Integrantes:** Stabile Maximiliano, Jara Agostina, Sanchez Iván
-**Estado:** en construcción (código completo y probado con Docker; falta el guion del coloquio)
+**Estado:** en construcción completo. Guion del coloquio en `docs/GUION.md`
 
 ---
 
@@ -151,7 +151,7 @@ En toda operación que **no debe repetirse**: pagos, transferencias, crear pedid
 
 - **Ventana de tiempo:** la clave se recuerda 24 h (TTL). Un reintento posterior se trataría como un pago nuevo.
 - **Depende del cliente:** si el cliente genera una clave nueva en cada reintento, no hay protección posible.
-- **Si Redis se cae:** los pagos están programados como *fail-closed*: se rechazan con 503 en lugar de arriesgar un cobro doble. Lo probamos y respondió en 10 ms sin cobrar.
+- **Si Redis se cae:** los pagos están programados como *fail-closed*: se rechazan con 503 en lugar de arriesgar un cobro doble. Lo demuestra `demo/04_redis_caido.mjs`: el pago se rechazó al instante sin cobrar, y un pago hecho **antes** de la caída no se volvió a cobrar al reintentarlo después, porque la clave sobrevivió al reinicio gracias al **AOF** (Redis la había guardado en disco).
 - **Si el proceso muere a mitad del cobro:** la clave queda en "procesando" hasta que vence el TTL. En producción se usa un TTL corto para ese estado.
 - **Segunda barrera:** en producción se agregaría una restricción `UNIQUE` en la base sobre la clave. No la pusimos para poder mostrar el problema en los modos sin protección.
 
@@ -176,7 +176,15 @@ En toda operación que **no debe repetirse**: pagos, transferencias, crear pedid
 
 ---
 
-## 7. Posibles preguntas de la cátedra
+## 7. Conclusión técnica
+
+En un sistema distribuido, el estado que cada proceso guarda en su propia memoria no alcanza: lo comprobamos en el balanceo de nginx, en la caché y en la idempotencia. Redis resuelve ambos temas porque es una memoria **compartida, rápida y con operaciones atómicas** (`SET NX`).
+
+Pero no es gratis: es una pieza más que se puede caer, vive en RAM y sus copias pueden quedar desactualizadas. Por eso cada uso tiene que decidir qué pasa cuando falla. La caché sigue sin Redis porque perderla solo cuesta velocidad; los pagos se frenan porque un error cuesta plata. La idempotencia, además, no evita que lleguen pedidos repetidos: evita que **tengan efecto**.
+
+---
+
+## 8. Posibles preguntas de la cátedra
 
 **¿Por qué no guardar la caché en una variable dentro de la API?**
 Porque cada réplica tendría su propia copia: api-2 no aprovecharía lo que cacheó api-1, y al invalidar en una la otra seguiría con el dato viejo.

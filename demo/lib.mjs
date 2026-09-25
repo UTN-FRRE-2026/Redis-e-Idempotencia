@@ -7,6 +7,8 @@ const RAIZ = fileURLToPath(new URL("..", import.meta.url));
 const REDIS_CLI = process.env.REDIS_CLI ?? "docker compose exec -T redis redis-cli";
 
 export const redisCli = (cmd) => execSync(`${REDIS_CLI} ${cmd}`, { cwd: RAIZ }).toString().trim();
+export const ejecutar = (cmd) => execSync(cmd, { cwd: RAIZ, stdio: "ignore" });
+export const esperar = (ms) => new Promise((r) => setTimeout(r, ms));
 export const paso = (titulo) => console.log(`\n=== ${titulo} ===`);
 
 /** Envía un pago. Devuelve status, réplica que atendió y si fue una respuesta repetida. */

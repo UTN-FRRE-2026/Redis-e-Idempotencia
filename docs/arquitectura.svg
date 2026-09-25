@@ -1,0 +1,106 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1920 1080" width="1920" height="1080">
+  <defs>
+    <style>
+      .sans { font-family: 'IBM Plex Sans', 'Segoe UI', Helvetica, Arial, sans-serif; }
+      .mono { font-family: 'IBM Plex Mono', Consolas, 'Courier New', monospace; }
+      .ink  { fill: #16233A; }
+      .soft { fill: #5B6B82; }
+    </style>
+    <marker id="a-ink" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#16233A"/>
+    </marker>
+    <marker id="a-green" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#1E8A4C"/>
+    </marker>
+    <marker id="a-red" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#D82C20"/>
+    </marker>
+    <marker id="a-blue" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#336791"/>
+    </marker>
+  </defs>
+
+  <!-- Fondo -->
+  <rect width="1920" height="1080" fill="#F4F6F9"/>
+
+  <!-- Título -->
+  <text x="96" y="118" class="sans ink" font-size="58" font-weight="700">Dos réplicas, una memoria compartida</text>
+  <text x="96" y="168" class="sans soft" font-size="26">TP1: Redis (datos y caché) + Idempotencia y deduplicación</text>
+  <text x="1824" y="168" class="sans soft" font-size="22" text-anchor="end">Stabile Maximiliano, Jara Agostina, Sanchez Iván</text>
+
+  <!-- Límite de Docker Compose -->
+  <rect x="440" y="228" width="1394" height="650" rx="28" fill="none" stroke="#9AA8BA" stroke-width="2.5" stroke-dasharray="12 10"/>
+  <text x="470" y="268" class="mono soft" font-size="20">docker compose</text>
+
+  <!-- Cliente -->
+  <rect x="96" y="468" width="248" height="184" rx="20" fill="#FFFFFF" stroke="#16233A" stroke-width="2.5"/>
+  <text x="220" y="548" class="sans ink" font-size="32" font-weight="700" text-anchor="middle">Cliente</text>
+  <text x="220" y="584" class="sans soft" font-size="20" text-anchor="middle">navegador o script</text>
+  <text x="220" y="614" class="sans soft" font-size="20" text-anchor="middle">de la demo</text>
+
+  <!-- Cliente → nginx -->
+  <line x1="344" y1="560" x2="494" y2="560" stroke="#16233A" stroke-width="3" marker-end="url(#a-ink)"/>
+  <text x="388" y="542" class="mono soft" font-size="18" text-anchor="middle">:8080</text>
+
+  <!-- nginx -->
+  <rect x="500" y="468" width="248" height="184" rx="20" fill="#E5F3EA" stroke="#1E8A4C" stroke-width="3"/>
+  <text x="624" y="542" class="sans" fill="#146B39" font-size="34" font-weight="700" text-anchor="middle">nginx</text>
+  <text x="624" y="578" class="sans ink" font-size="20" text-anchor="middle">balanceador</text>
+  <text x="624" y="610" class="sans soft" font-size="19" text-anchor="middle">reparte en turnos</text>
+
+  <!-- nginx → réplicas -->
+  <path d="M748,530 C810,530 820,410 874,410" fill="none" stroke="#1E8A4C" stroke-width="3" marker-end="url(#a-green)"/>
+  <path d="M748,590 C810,590 820,710 874,710" fill="none" stroke="#1E8A4C" stroke-width="3" marker-end="url(#a-green)"/>
+
+  <!-- api-1 -->
+  <rect x="880" y="306" width="356" height="208" rx="20" fill="#FFFFFF" stroke="#4A5B73" stroke-width="2.5"/>
+  <text x="912" y="360" class="sans ink" font-size="34" font-weight="700">api-1</text>
+  <text x="912" y="394" class="sans soft" font-size="20">Node + TypeScript</text>
+  <rect x="912" y="424" width="292" height="60" rx="12" fill="#F4F6F9" stroke="#9AA8BA" stroke-width="2" stroke-dasharray="7 6"/>
+  <text x="1058" y="461" class="sans soft" font-size="19" text-anchor="middle">memoria local propia</text>
+
+  <!-- api-2 -->
+  <rect x="880" y="606" width="356" height="208" rx="20" fill="#FFFFFF" stroke="#4A5B73" stroke-width="2.5"/>
+  <text x="912" y="660" class="sans ink" font-size="34" font-weight="700">api-2</text>
+  <text x="912" y="694" class="sans soft" font-size="20">Node + TypeScript</text>
+  <rect x="912" y="724" width="292" height="60" rx="12" fill="#F4F6F9" stroke="#9AA8BA" stroke-width="2" stroke-dasharray="7 6"/>
+  <text x="1058" y="761" class="sans soft" font-size="19" text-anchor="middle">memoria local propia</text>
+
+  <!-- Separación entre réplicas: el mensaje central -->
+  <line x1="896" y1="560" x2="928" y2="560" stroke="#B0231A" stroke-width="2.5" stroke-dasharray="6 6"/>
+  <line x1="1188" y1="560" x2="1220" y2="560" stroke="#B0231A" stroke-width="2.5" stroke-dasharray="6 6"/>
+  <text x="1058" y="568" class="sans" fill="#B0231A" font-size="22" font-weight="600" text-anchor="middle">no comparten memoria</text>
+
+  <!-- Réplicas → Redis (rojo) y → Postgres (azul) -->
+  <line x1="1236" y1="390" x2="1374" y2="390" stroke="#D82C20" stroke-width="3" marker-end="url(#a-red)"/>
+  <path d="M1236,680 C1300,680 1310,500 1374,500" fill="none" stroke="#D82C20" stroke-width="3" marker-end="url(#a-red)"/>
+  <path d="M1236,440 C1300,440 1310,660 1374,660" fill="none" stroke="#336791" stroke-width="3" marker-end="url(#a-blue)"/>
+  <line x1="1236" y1="760" x2="1374" y2="760" stroke="#336791" stroke-width="3" marker-end="url(#a-blue)"/>
+
+  <!-- Redis -->
+  <rect x="1380" y="290" width="420" height="262" rx="20" fill="#FCEBE9" stroke="#D82C20" stroke-width="3"/>
+  <text x="1408" y="344" class="sans" fill="#A61E15" font-size="36" font-weight="700">Redis</text>
+  <text x="1408" y="376" class="sans ink" font-size="20">compartido por las dos réplicas</text>
+  <rect x="1404" y="398" width="372" height="64" rx="12" fill="#FFFFFF"/>
+  <text x="1424" y="426" class="sans ink" font-size="19" font-weight="700">Caché</text>
+  <text x="1424" y="451" class="mono" fill="#A61E15" font-size="18">producto:1  TTL 20 s</text>
+  <rect x="1404" y="472" width="372" height="64" rx="12" fill="#FFFFFF"/>
+  <text x="1424" y="500" class="sans ink" font-size="19" font-weight="700">Idempotencia</text>
+  <text x="1424" y="525" class="mono" fill="#A61E15" font-size="18">idem:&lt;clave&gt;  SET NX</text>
+
+  <!-- Postgres -->
+  <rect x="1380" y="612" width="420" height="206" rx="20" fill="#E7EFF7" stroke="#336791" stroke-width="3"/>
+  <text x="1408" y="666" class="sans" fill="#234B6C" font-size="36" font-weight="700">Postgres</text>
+  <text x="1408" y="698" class="sans ink" font-size="20">fuente de verdad: el dato real</text>
+  <rect x="1404" y="722" width="372" height="64" rx="12" fill="#FFFFFF"/>
+  <text x="1424" y="762" class="mono" fill="#234B6C" font-size="18">tablas productos y pagos</text>
+
+  <!-- Resultados de la demo -->
+  <line x1="96" y1="922" x2="1824" y2="922" stroke="#D5DCE5" stroke-width="2"/>
+
+  <text x="96" y="980" class="sans ink" font-size="34" font-weight="700">Caché: de 500 ms a 5 ms</text>
+  <text x="96" y="1020" class="sans soft" font-size="21">La segunda lectura sale de Redis, aunque la atienda la otra réplica.</text>
+
+  <text x="990" y="980" class="sans ink" font-size="34" font-weight="700">Idempotencia: 20 pedidos, 1 cobro</text>
+  <text x="990" y="1020" class="sans soft" font-size="21">La misma Idempotency-Key cobra una sola vez, en cualquier réplica.</text>
+</svg>
