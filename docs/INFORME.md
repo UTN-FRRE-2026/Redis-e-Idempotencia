@@ -209,3 +209,6 @@ Porque dentro de una misma réplica sí funciona (Node ejecuta el código de a u
 
 **¿Por qué con Redis caído la caché sigue y los pagos no?**
 Porque perder la caché solo cuesta velocidad, mientras que perder la idempotencia cuesta plata. Cada caso decide qué error es más aceptable.
+
+**En la demo de concurrencia, ¿por qué los rechazados aparecen antes que el pago cobrado?**
+La salida es un resumen agrupado, no el orden de llegada. El que se cobra es el **primero** en llegar a Redis: gana el `SET NX` y tarda un segundo en cobrar. Los otros 19 llegan durante ese segundo, ven la clave en "procesando" y reciben 409 al instante. Por eso sus respuestas vuelven antes que la del pago cobrado.

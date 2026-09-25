@@ -2,9 +2,9 @@
 
 | Tramo | Minutos | Quién | Qué |
 |---|---|---|---|
-| Introducción | 0:00 a 3:00 | Iván, Agostina, Maximiliano | Problema, diagrama y los dos conceptos |
-| Demo | 3:00 a 12:00 | Iván, Agostina, Maximiliano, Iván | Balanceo, caché, idempotencia, caída de Redis |
-| Cierre | 12:00 a 15:00 | Iván + todos | Conclusión y preguntas |
+| Introducción | 0:00 a 5:00 | Iván, Agostina, Maximiliano, Iván | El problema, qué es Redis, qué son la idempotencia y la deduplicación, y cómo se relacionan |
+| Demo | 5:00 a 14:00 | Iván, Agostina, Maximiliano, Iván | Balanceo, caché, idempotencia, caída de Redis |
+| Cierre | 14:00 a 15:00 | Iván | Conclusión técnica |
 
 Las frases entre comillas son una guía: **no hay que leerlas ni memorizarlas**, solo entender la idea y decirla con palabras propias.
 
@@ -13,7 +13,7 @@ Las frases entre comillas son una guía: **no hay que leerlas ni memorizarlas**,
 ## Antes de entrar (preparación)
 
 1. Con wifi, ejecutar `docker compose build` para tener las imágenes listas.
-2. Justo antes de empezar, arrancar limpio con `docker compose down -v` y después `docker compose up -d`.
+2. Justo antes de empezar, arrancar limpio ejecutando **por separado** `docker compose down -v` y después `docker compose up -d`.
 3. Correr `node demo/00_health.mjs` una vez para confirmar que todo responde.
 4. Dejar abiertas tres ventanas:
    - **Imagen:** `docs/arquitectura.png` en pantalla completa.
@@ -23,27 +23,43 @@ Las frases entre comillas son una guía: **no hay que leerlas ni memorizarlas**,
 
 ---
 
-## 1. Introducción (0:00 a 3:00)
+## 1. Introducción (0:00 a 5:00)
 
-### Iván: el problema (1:30) · muestra la imagen
+### Iván: el problema (1:00) · muestra la imagen
 
-> "Hoy las aplicaciones no corren en un solo servidor: corren varias copias del mismo servicio, llamadas réplicas, para aguantar más carga y no caerse. Armamos una tienda online con dos réplicas, api-1 y api-2, y un balanceador, nginx, que les reparte los pedidos en turnos."
+> "Hoy las aplicaciones no corren en un solo servidor: corren varias copias del mismo servicio, llamadas réplicas, para aguantar más carga y no caerse si una falla. Eso trae dos problemas. El primero es la velocidad: si cada pedido va a la base de datos, todo se vuelve lento. El segundo son los pedidos repetidos: si un cliente reintenta un pago porque se le cortó la conexión, puede terminar pagando dos veces. Nuestros dos temas resuelven justamente esto."
 
-Señalar en la imagen la línea roja entre las réplicas:
+### Agostina: qué es Redis y qué es una caché (1:30)
 
-> "El problema es que cada réplica tiene su propia memoria y no comparten nada. Eso trae dos problemas: si cada consulta va a la base de datos, todo es lento; y si un cliente reintenta un pago, la otra réplica no sabe que ya se cobró. Los dos problemas se resuelven con lo mismo: Redis, una memoria rápida y compartida por todas las réplicas."
+> "Redis es una base de datos que guarda todo en memoria RAM, en lugar de en disco. Por eso es muy rápida: responde en menos de un milisegundo. Funciona como un diccionario gigante de clave y valor: guardás algo con un nombre, como `producto:1`, y lo pedís por ese nombre."
 
-### Agostina: qué es una caché (0:45) · sigue la imagen, señala "Caché" en Redis
+> "Tiene dos características importantes para nosotros. La primera es el **TTL**: a cada clave le podés poner un tiempo de vida, y Redis la borra sola cuando se vence. La segunda es que sus operaciones son **atómicas**: se ejecutan de a una, sin que otra se meta en el medio."
 
-> "Una caché es guardar una copia de un dato en un lugar rápido para no ir a buscarlo cada vez. Redis guarda los datos en memoria RAM, que es mucho más rápida que la base. Si el dato está, es un HIT; si no está, es un MISS: se busca en la base y se guarda una copia. La copia tiene un TTL, un tiempo de vida, para que no quede vieja para siempre."
+> "Se usa para muchas cosas: sesiones de usuarios, contadores, colas de mensajes, rankings. El uso más común es como **caché**: guardar una copia de un dato que se pide mucho para no ir a buscarlo a la base cada vez. Si el dato está en la caché, es un **HIT** y la respuesta es instantánea. Si no está, es un **MISS**: se busca en la base, que es más lenta, y se guarda una copia para la próxima."
 
-### Maximiliano: qué es la idempotencia (0:45) · señala "Idempotencia" en Redis
+> "Como vive en la RAM, si Redis se apaga pierde todo. Para evitarlo tiene una opción llamada **AOF**, que anota cada operación en un archivo en disco y, al reiniciar, las repite para recuperar los datos. Lo vamos a ver al final de la demo."
 
-> "Una operación es idempotente si hacerla una o muchas veces da el mismo resultado. Consultar un producto lo es, pero cobrar no: cada cobro repetido le saca plata al cliente. La solución es que cada pago lleve un número único, la Idempotency-Key. El servidor lo anota en Redis y, si le vuelve a llegar, no cobra de nuevo: devuelve la misma respuesta de la primera vez."
+### Maximiliano: qué son la idempotencia y la deduplicación (1:30)
+
+> "Una operación es **idempotente** si hacerla una vez o muchas veces deja el mismo resultado. Por ejemplo, consultar un producto: lo consultás diez veces y no cambia nada. O apretar el botón del ascensor: apretarlo cinco veces no lo hace venir cinco veces. Pero **cobrar no es idempotente**: cada cobro repetido le saca plata al cliente."
+
+> "¿Por qué llegan pedidos repetidos? Porque las redes fallan. El cliente manda el pago, se corta la conexión, no sabe si se cobró y reintenta. También por el doble clic, o por sistemas que reintentan solos."
+
+> "La solución más usada es la **Idempotency-Key**, la que usan pasarelas de pago como Stripe. El cliente genera un número único para cada pago y lo manda con el pedido. Todos los reintentos de ese pago llevan el mismo número. El servidor lo anota y, si le vuelve a llegar, **no cobra de nuevo**: devuelve la misma respuesta de la primera vez."
+
+> "La **deduplicación** es la misma idea aplicada a mensajes. En sistemas con colas, los mensajes se entregan 'al menos una vez', o sea que a veces llegan repetidos. Cada mensaje tiene un ID, y el que lo recibe descarta los que ya procesó. La idea clave es que no podemos evitar que lleguen duplicados, pero sí podemos evitar que tengan efecto."
+
+### Iván: cómo se relacionan (1:00) · vuelve a la imagen
+
+> "Armamos una tienda online con dos réplicas, api-1 y api-2, y un balanceador, nginx, que les reparte los pedidos en turnos. Todo corre en contenedores con Docker Compose."
+
+Señalar la línea roja entre las réplicas:
+
+> "El problema es que cada réplica tiene su propia memoria y no comparten nada. Si la caché estuviera en la memoria de cada una, api-2 no aprovecharía lo que guardó api-1. Y si las claves de idempotencia estuvieran ahí, un reintento que cae en la otra réplica se cobraría de nuevo. Por eso las dos cosas van en Redis: una memoria rápida y **compartida** por todas las réplicas."
 
 ---
 
-## 2. Demo (3:00 a 12:00)
+## 2. Demo (5:00 a 14:00)
 
 ### Iván: todo funciona y hay dos réplicas (0:30)
 
@@ -102,19 +118,17 @@ node demo/04_redis_caido.mjs
 
 1. **Paso 3, el producto se lee igual:** "La caché falla abierta: sin Redis seguimos leyendo de Postgres, más lento pero funciona."
 2. **Paso 4, pago rechazado con 503:** "Los pagos fallan cerrados: si no podemos verificar si es un pago repetido, preferimos no cobrar a cobrar dos veces."
-3. **Paso 6, el pago A no se cobra de nuevo:** "Cuando Redis vuelve, la clave del pago anterior sigue ahí, porque Redis la guardó en disco (AOF). El reintento no cobra."
+3. **Paso 6, el pago A no se cobra de nuevo:** "Cuando Redis vuelve, la clave del pago anterior sigue ahí. Es el AOF que explicó Agostina al principio: Redis había anotado la operación en disco y la recuperó al reiniciar. El reintento no cobra."
 
 ---
 
-## 3. Cierre (12:00 a 15:00)
+## 3. Cierre (14:00 a 15:00)
 
 ### Iván: conclusión técnica (1:00)
 
 > "En un sistema distribuido, lo que cada servidor guarda en su propia memoria no alcanza. Lo vimos tres veces: en el balanceo de nginx, en la caché y en la idempotencia. Redis resuelve los dos temas porque es una memoria compartida, rápida y con operaciones atómicas. Pero tiene un costo: es otra pieza que se puede caer, vive en RAM y sus copias pueden quedar desactualizadas. Por eso cada uso decide qué pasa cuando falla: la caché sigue sin Redis porque perderla solo cuesta velocidad; los pagos se frenan porque un error cuesta plata."
 
-### Todos: preguntas (2:00)
-
-Responde quien sepa más de ese tema, pero **cualquiera tiene que poder contestar**. Las respuestas a las preguntas más probables están en `docs/INFORME.md`, sección 8.
+Aunque no haya tiempo de preguntas en el coloquio, **todos deberían leer la sección 8 del informe** (`docs/INFORME.md`): la cátedra puede preguntar en cualquier momento, y cualquiera tiene que poder responder.
 
 ---
 
