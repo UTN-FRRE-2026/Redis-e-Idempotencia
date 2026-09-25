@@ -21,8 +21,8 @@ for (const modo of ["memoria", "redis"]) {
     const k = `${r.instancia} → ${describir(r)}`;
     resumen[k] = (resumen[k] ?? 0) + 1;
   }
-  for (const [k, n] of Object.entries(resumen).sort()) console.log(`${String(n).padStart(2)} x ${k}`);
-
+    console.log(`Resumen de las ${N} respuestas (agrupadas por tipo, no en orden de llegada):`);
+  for (const [k, n] of Object.entries(resumen).sort(([a], [b]) => b.includes("PROCESADO") - a.includes("PROCESADO") || a.localeCompare(b))) console.log(`${String(n).padStart(2)} x ${k}`);
   const { cantidad, pagos } = await cobros(cliente);
   const veredicto = cantidad === 1 ? "✅ correcto" : "❌ ¡COBRO DUPLICADO!";
   console.log(`Cobros en la base: ${cantidad} (${pagos.map((p) => p.atendido_por).join(", ")}) → ${veredicto}`);
