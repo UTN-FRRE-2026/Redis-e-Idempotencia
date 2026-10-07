@@ -1,6 +1,7 @@
 // Fase 1: verifica que todo esté levantado y que nginx reparta entre las dos réplicas.
 // Uso: node demo/00_health.mjs
-const BASE = process.env.BASE_URL ?? "http://localhost:8080";
+// La API vive detrás de /api (nginx sirve el panel en /).
+const BASE = process.env.BASE_URL ?? "http://localhost:8080/api";
 
 console.log(`Enviando 6 peticiones a ${BASE}/health\n`);
 

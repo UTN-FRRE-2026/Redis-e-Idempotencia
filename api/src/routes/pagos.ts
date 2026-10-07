@@ -2,6 +2,7 @@ import { Router } from "express";
 import { createHash } from "node:crypto";
 import { pool } from "../db";
 import { AlmacenIdempotencia, AlmacenMemoria, AlmacenRedis } from "../idempotencia";
+import { publicarEventoPago, PagoEvento } from "../eventos";
 
 const INSTANCE = process.env.INSTANCE ?? "api-local";
 const DEMORA_PAGO_MS = Number(process.env.PAGO_DELAY_MS ?? 1000);
@@ -14,6 +15,20 @@ const almacenes: Record<string, AlmacenIdempotencia> = {
 
 const esperar = (ms: number) => new Promise((r) => setTimeout(r, ms));
 const huella = (datos: unknown) => createHash("sha256").update(JSON.stringify(datos)).digest("hex");
+
+/**
+ * Publica el evento del cobro en el stream, pero sin arriesgar el pago:
+ * si Redis está caído (modos off/memoria), el XADD puede fallar. En ese caso
+ * NO rompemos el pago: logueamos la advertencia y devolvemos eventoId = null.
+ */
+async function publicarEventoSeguro(pago: PagoEvento): Promise<string | null> {
+  try {
+    return await publicarEventoPago(pago);
+  } catch (err) {
+    console.warn(`[${INSTANCE}] no se pudo publicar el evento del pago ${pago.id}: ${(err as Error).message}`);
+    return null;
+  }
+}
 
 /** El "cobro" real: tarda (simula la pasarela de pago) y queda registrado en Postgres. */
 async function procesarPago(cliente: string, monto: number) {
@@ -44,8 +59,10 @@ pagosRouter.post("/", async (req, res) => {
     // ── MODO OFF: sin protección, cada petición cobra ─────────────────────────
     if (modo === "off") {
       const pago = await procesarPago(cliente, monto);
+      // Al cobrar de verdad publicamos el evento (dispara el email del worker).
+      const eventoId = await publicarEventoSeguro(pago);
       console.log(`[${INSTANCE}] [off] PAGO PROCESADO id=${pago.id}`);
-      return res.status(201).json({ mensaje: "Pago procesado (sin protección)", pago });
+      return res.status(201).json({ mensaje: "Pago procesado (sin protección)", pago, eventoId });
     }
 
     const almacen = almacenes[modo];
@@ -77,7 +94,10 @@ pagosRouter.post("/", async (req, res) => {
     // ── 3. Primera vez que vemos esta clave: cobramos ────────────────────────
     try {
       const pago = await procesarPago(cliente, monto);
-      const respuesta = { mensaje: "Pago procesado", pago };
+      // Publicamos el evento del cobro y guardamos el eventoId DENTRO de la respuesta,
+      // así los reintentos (modo redis) devuelven exactamente la misma respuesta, con el mismo eventoId.
+      const eventoId = await publicarEventoSeguro(pago);
+      const respuesta = { mensaje: "Pago procesado", pago, eventoId };
       await almacen.guardar(clave, { estado: "completado", hash, status: 201, respuesta });
       console.log(`[${INSTANCE}] [${modo}] PAGO PROCESADO id=${pago.id} (${clave})`);
       return res.status(201).json(respuesta);

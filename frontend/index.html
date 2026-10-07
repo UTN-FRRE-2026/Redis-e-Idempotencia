@@ -1,0 +1,248 @@
+<!DOCTYPE html>
+<html lang="es">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Tienda distribuida · panel de demo</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <div class="app">
+      <!-- ══════════════════ BARRA SUPERIOR ══════════════════ -->
+      <header class="barra">
+        <div class="titulo">
+          <strong>Tienda distribuida</strong> <span>panel de demo</span>
+        </div>
+        <div class="luces" id="luces">
+          <span class="luz" data-luz="api-1"><i></i>api-1</span>
+          <span class="luz" data-luz="api-2"><i></i>api-2</span>
+          <span class="luz" data-luz="redis"><i></i>Redis</span>
+          <span class="luz" data-luz="postgres"><i></i>Postgres</span>
+          <span class="luz" data-luz="worker"><i></i>Worker</span>
+        </div>
+        <button class="btn-reiniciar" id="btn-reiniciar">Reiniciar demo</button>
+      </header>
+
+      <!-- ══════════════════ ARQUITECTURA EN VIVO ══════════════════ -->
+      <section class="tarjeta arquitectura">
+        <div class="arq-izq">
+          <span class="rotulo">ARQUITECTURA EN VIVO</span>
+          <svg id="diagrama" viewBox="0 0 920 230" preserveAspectRatio="xMidYMid meet">
+            <!-- Cables (se dibujan primero para que queden debajo de los nodos) -->
+            <path id="cable-cliente-nginx" class="cable" d="M130 113 L190 113" />
+            <path id="cable-nginx-api-1" class="cable" d="M310 113 L370 56" />
+            <path id="cable-nginx-api-2" class="cable" d="M310 113 L370 174" />
+            <path id="cable-api-1-redis" class="cable" d="M490 56 L560 56" />
+            <path id="cable-api-1-postgres" class="cable" d="M490 56 L560 174" />
+            <path id="cable-api-2-redis" class="cable" d="M490 174 L560 56" />
+            <path id="cable-api-2-postgres" class="cable" d="M490 174 L560 174" />
+            <path id="cable-redis-worker" class="cable" d="M690 56 L760 104" />
+            <path id="cable-postgres-worker" class="cable" d="M690 174 L760 122" />
+            <text x="712" y="86" class="cable-rotulo">stream</text>
+
+            <!-- Nodos -->
+            <g id="nodo-cliente" class="nodo">
+              <rect x="10" y="85" width="120" height="56" rx="12" />
+              <text x="70" y="118">Cliente</text>
+            </g>
+            <g id="nodo-nginx" class="nodo tipo-nginx">
+              <rect x="190" y="85" width="120" height="56" rx="12" />
+              <text x="250" y="118">nginx</text>
+            </g>
+            <g id="nodo-api-1" class="nodo">
+              <rect x="370" y="30" width="120" height="52" rx="12" />
+              <text x="430" y="61">api-1</text>
+            </g>
+            <g id="nodo-api-2" class="nodo">
+              <rect x="370" y="148" width="120" height="52" rx="12" />
+              <text x="430" y="179">api-2</text>
+            </g>
+            <g id="nodo-redis" class="nodo tipo-redis">
+              <rect x="560" y="30" width="130" height="52" rx="12" />
+              <text x="625" y="61">Redis</text>
+            </g>
+            <g id="nodo-postgres" class="nodo tipo-postgres">
+              <rect x="560" y="148" width="130" height="52" rx="12" />
+              <text x="625" y="179">Postgres</text>
+            </g>
+            <g id="nodo-worker" class="nodo">
+              <rect x="760" y="85" width="130" height="56" rx="12" />
+              <text x="825" y="118">Worker</text>
+            </g>
+
+            <!-- Punto que recorre el camino real de cada pedido -->
+            <circle id="punto" r="6" />
+          </svg>
+        </div>
+
+        <aside class="ultimo-pedido">
+          <span class="rotulo">ÚLTIMO PEDIDO</span>
+          <div class="up-ruta" id="up-ruta">—</div>
+          <dl>
+            <div><dt>Atendió</dt><dd id="up-replica">—</dd></div>
+            <div><dt>Resultado</dt><dd id="up-resultado">—</dd></div>
+            <div><dt>Tiempo</dt><dd id="up-tiempo">—</dd></div>
+          </dl>
+        </aside>
+      </section>
+
+      <!-- ══════════════════ CONTENIDO: pestañas + Redis por dentro ══════════════════ -->
+      <div class="contenido">
+        <div class="col-principal">
+          <nav class="tabs" id="tabs">
+            <button class="tab activo" data-tab="cache">Caché</button>
+            <button class="tab" data-tab="idem">Idempotencia</button>
+            <button class="tab" data-tab="dedup">Deduplicación</button>
+            <button class="tab" data-tab="fallas">Fallas</button>
+          </nav>
+
+          <!-- ───────── Pestaña CACHÉ ───────── -->
+          <section class="panel activo" id="panel-cache">
+            <div class="tarjeta">
+              <h3>Productos</h3>
+              <p class="sub">Consultar mide el tiempo real. La 1ª vez va a Postgres (MISS, ~500 ms); después sale de Redis (HIT).</p>
+              <div class="grilla-productos" id="grilla-productos"></div>
+            </div>
+            <div class="tarjeta">
+              <h3>Últimas 10 consultas</h3>
+              <div class="sello-grande" id="sello-cache"><span>Consultá un producto</span></div>
+              <svg id="grafico-cache" viewBox="0 0 340 150" preserveAspectRatio="none"></svg>
+              <div class="promedios" id="promedios-cache"></div>
+            </div>
+          </section>
+
+          <!-- ───────── Pestaña IDEMPOTENCIA ───────── -->
+          <section class="panel" id="panel-idem">
+            <div class="tarjeta controles-idem">
+              <div class="grupo">
+                <span class="rotulo">MODO</span>
+                <div class="segmentado" id="modo-idem">
+                  <button data-modo="off">Sin protección</button>
+                  <button data-modo="memoria">Memoria local</button>
+                  <button data-modo="redis" class="activo">Redis</button>
+                </div>
+              </div>
+              <div class="grupo">
+                <span class="rotulo">ESCENARIO</span>
+                <div class="botones-escenario">
+                  <button class="btn" data-escenario="uno">Pagar $15.000</button>
+                  <button class="btn oscuro" data-escenario="tres">Se cortó la conexión: reintentar ×3</button>
+                  <button class="btn" data-escenario="veinte">Doble clic: 20 a la vez</button>
+                </div>
+              </div>
+            </div>
+            <div class="cuerpo-idem">
+              <div class="tarjeta">
+                <h3>Línea de tiempo</h3>
+                <p class="sub" id="idem-sub">Elegí un escenario para empezar.</p>
+                <div class="timeline cabecera">
+                  <span>INTENTO</span><span>RÉPLICA</span><span>RESULTADO</span><span class="der">TIEMPO</span>
+                </div>
+                <div id="idem-timeline"></div>
+                <div class="idem-clave" id="idem-clave"></div>
+              </div>
+              <div class="tarjeta">
+                <h3>Billetera del cliente</h3>
+                <p class="sub">Lo que realmente se le cobró</p>
+                <div class="billetera">
+                  <div class="billetera-total" id="billetera-total">—</div>
+                  <div class="billetera-chip" id="billetera-chip"></div>
+                </div>
+                <p class="sub" id="billetera-detalle"></p>
+                <h4>El mismo escenario en cada modo</h4>
+                <div id="comparacion-modos" class="comparacion"></div>
+                <p class="nota">Rojo: el cliente pagó de más por pedidos repetidos.</p>
+              </div>
+            </div>
+          </section>
+
+          <!-- ───────── Pestaña DEDUPLICACIÓN ───────── -->
+          <section class="panel" id="panel-dedup">
+            <div class="esquema-dedup">
+              <span>API</span><span class="flecha">→</span>
+              <span class="cola">cola <code>pagos:eventos</code></span><span class="flecha">→</span>
+              <span>Worker</span><span class="flecha">→</span><span>Email</span>
+            </div>
+            <div class="tarjeta controles-dedup">
+              <label class="interruptor">
+                <input type="checkbox" id="dedup-switch" />
+                <span class="pista"></span>
+                <span class="interruptor-texto">Deduplicación <b id="dedup-estado">—</b></span>
+              </label>
+              <div class="botones-dedup">
+                <button class="btn" id="dedup-pagar">Pagar $15.000</button>
+                <button class="btn oscuro" id="dedup-reenviar" disabled>La cola entrega el mensaje de nuevo</button>
+              </div>
+            </div>
+            <div class="cuerpo-dedup">
+              <div class="tarjeta">
+                <h3>Bandeja de entrada del cliente</h3>
+                <p class="sub" id="dedup-cliente">Todavía no hay pagos.</p>
+                <div id="bandeja" class="bandeja"></div>
+              </div>
+              <div class="tarjeta">
+                <h3>Registro del worker</h3>
+                <p class="sub">Qué hizo el worker con cada mensaje de la cola</p>
+                <div id="worker-log" class="worker-log"></div>
+              </div>
+            </div>
+          </section>
+
+          <!-- ───────── Pestaña FALLAS ───────── -->
+          <section class="panel" id="panel-fallas">
+            <div class="tarjeta guia-fallas">
+              <h3>Redis se apaga desde la terminal</h3>
+              <p class="sub">No hay botones que apaguen nada: se hace con Docker para que sea real.</p>
+              <div class="comando">
+                <code>docker compose stop redis</code>
+                <button class="btn-copiar" data-copiar="docker compose stop redis">Copiar</button>
+              </div>
+              <div class="comando">
+                <code>docker compose start redis</code>
+                <button class="btn-copiar" data-copiar="docker compose start redis">Copiar</button>
+              </div>
+            </div>
+            <div class="indicadores">
+              <div class="indicador" id="ind-redis">
+                <span class="ind-titulo">Redis</span>
+                <strong id="ind-redis-valor">—</strong>
+              </div>
+              <div class="indicador" id="ind-cache">
+                <span class="ind-titulo">Caché</span>
+                <strong id="ind-cache-valor">—</strong>
+              </div>
+              <div class="indicador" id="ind-pagos">
+                <span class="ind-titulo">Pagos</span>
+                <strong id="ind-pagos-valor">—</strong>
+              </div>
+            </div>
+            <div class="tarjeta pruebas-fallas">
+              <h3>Probá en vivo</h3>
+              <div class="botones-fallas">
+                <button class="btn" id="falla-producto">Consultar producto</button>
+                <button class="btn" id="falla-pago">Intentar pago</button>
+                <button class="btn" id="falla-reintento" disabled>Reintentar el pago anterior</button>
+              </div>
+              <div id="falla-resultado" class="falla-resultado"></div>
+            </div>
+          </section>
+        </div>
+
+        <!-- ───────── Columna derecha fija: REDIS POR DENTRO ───────── -->
+        <aside class="col-redis">
+          <div class="tarjeta redis-dentro">
+            <div class="redis-cabecera">
+              <h3>Redis por dentro</h3>
+              <span class="en-vivo">en vivo <i></i></span>
+            </div>
+            <p class="sub">Claves guardadas en este momento</p>
+            <div id="claves-redis" class="claves-redis"></div>
+            <p class="nota" id="redis-pie">Se actualiza cada 1 segundo</p>
+          </div>
+        </aside>
+      </div>
+    </div>
+
+    <script src="app.js"></script>
+  </body>
+</html>

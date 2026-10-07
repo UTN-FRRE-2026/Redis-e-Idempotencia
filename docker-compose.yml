@@ -54,10 +54,20 @@ services:
       <<: *api-env
       INSTANCE: api-2
 
+  # Worker: misma imagen que la API, pero arranca con el consumidor del stream.
+  # Lee la cola "pagos:eventos" y "envía los emails", deduplicando los reenvíos.
+  worker:
+    <<: *api
+    command: ["node", "dist/worker.js"]
+    environment:
+      <<: *api-env
+      INSTANCE: worker
+
   nginx:
     image: nginx:alpine
     volumes:
       - ./nginx/nginx.conf:/etc/nginx/conf.d/default.conf:ro
+      - ./frontend:/usr/share/nginx/html:ro   # panel web (archivos estáticos)
     ports:
       - "8080:80"   # único puerto expuesto: todo entra por el balanceador
     depends_on:

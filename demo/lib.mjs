@@ -2,7 +2,8 @@
 import { execSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 
-export const BASE = process.env.BASE_URL ?? "http://localhost:8080";
+// La API ahora vive detrás del prefijo /api (nginx sirve el panel en /).
+export const BASE = process.env.BASE_URL ?? "http://localhost:8080/api";
 const RAIZ = fileURLToPath(new URL("..", import.meta.url));
 const REDIS_CLI = process.env.REDIS_CLI ?? "docker compose exec -T redis redis-cli";
 

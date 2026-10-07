@@ -3,6 +3,8 @@ import { redis, connectRedis } from "./redis";
 import { pool } from "./db";
 import { productosRouter } from "./routes/productos";
 import { pagosRouter } from "./routes/pagos";
+import { emailsRouter } from "./routes/emails";
+import { adminRouter } from "./routes/admin";
 
 const INSTANCE = process.env.INSTANCE ?? "api-local";
 const PORT = Number(process.env.PORT ?? 3000);
@@ -34,6 +36,8 @@ app.get("/health", async (_req, res) => {
 
 app.use("/productos", productosRouter);
 app.use("/pagos", pagosRouter);
+app.use("/emails", emailsRouter);
+app.use("/admin", adminRouter);
 
 async function main(): Promise<void> {
   await connectRedis();

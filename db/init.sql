@@ -23,3 +23,16 @@ CREATE TABLE pagos (
     atendido_por  TEXT           NOT NULL,
     creado_en     TIMESTAMPTZ    NOT NULL DEFAULT now()
 );
+
+-- Cada fila es un email "enviado" por el worker al cobrar un pago.
+-- Si aparece dos veces el mismo evento_id, el cliente recibió el comprobante dos veces.
+-- A propósito NO ponemos UNIQUE sobre evento_id: así podemos MOSTRAR el duplicado
+-- cuando la deduplicación está apagada.
+CREATE TABLE emails (
+    id          SERIAL PRIMARY KEY,
+    evento_id   TEXT           NOT NULL,
+    pago_id     INTEGER        NOT NULL,
+    cliente     TEXT           NOT NULL,
+    monto       NUMERIC(10, 2) NOT NULL,
+    enviado_en  TIMESTAMPTZ    NOT NULL DEFAULT now()
+);
