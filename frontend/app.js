@@ -42,7 +42,12 @@ async function llamarApi(ruta, opciones = {}) {
   const t0 = performance.now();
   const res = await fetch(`/api${ruta}`, opciones);
   const ms = Math.round(performance.now() - t0);
-  return { res, ms, instancia: res.headers.get("x-instance") };
+  const instancia = res.headers.get("x-instance");
+  // Cualquier respuesta prueba que esa réplica está viva (no solo /admin/estado):
+  // como nginx alterna entre TODAS las peticiones, el poll de estado podría caer
+  // siempre en la misma réplica y pintar la otra en rojo sin estar caída.
+  if (instancia) estado.replicas[instancia] = { ...estado.replicas[instancia], ts: Date.now() };
+  return { res, ms, instancia };
 }
 
 // ════════════════════════════════════════════════════════════════════════════
@@ -669,3 +674,6 @@ pollEstado(); setInterval(pollEstado, 1000);
 pollRedis(); setInterval(pollRedis, 1000);
 setInterval(pollBandeja, 1000);
 setInterval(pollWorkerLog, 1000);
+// Las luces se recalculan aparte: si una réplica se cae, su pedido queda colgado
+// y no hay que esperar a que termine para pintarla en rojo.
+setInterval(actualizarLuces, 500);
