@@ -1,5 +1,6 @@
 import { createClient } from "redis";
 import { Pool } from "pg";
+import { SQL_TABLA_EMAILS } from "./db";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Worker: consume el stream "pagos:eventos" y "envía el email" del comprobante.
@@ -35,7 +36,7 @@ interface EntradaLog {
   eventoId: string;
   pagoId: string;
   cliente: string;
-  resultado: "enviado" | "duplicado descartado";
+  resultado: "enviado" | "duplicado descartado" | "error";
   dedup: string;
   ts: number;
 }
@@ -64,6 +65,7 @@ async function procesarMensaje(id: string, message: Record<string, string>): Pro
   // El interruptor de deduplicación lo controla el panel (config:dedup). Por defecto, "on".
   const dedup = (await redis.get("config:dedup")) ?? "on";
 
+  let marcado = false; // true si anotamos dedup:<eventoId> en este intento
   if (dedup === "on") {
     // SET dedup:<eventoId> 1 NX EX 86400
     // NX = "solo si NO existe". Si devuelve null, ya procesamos este eventoId → es un duplicado.
@@ -74,14 +76,24 @@ async function procesarMensaje(id: string, message: Record<string, string>): Pro
       await redis.xAck(STREAM, GRUPO, id); // igual confirmamos el mensaje: ya lo manejamos
       return;
     }
+    marcado = true;
   }
 
   // "Enviar el email": simulamos la demora y lo registramos en Postgres.
-  await esperar(EMAIL_DELAY_MS);
-  await pool.query(
-    "INSERT INTO emails (evento_id, pago_id, cliente, monto) VALUES ($1, $2, $3, $4)",
-    [eventoId, Number(pagoId), cliente, Number(monto)]
-  );
+  try {
+    await esperar(EMAIL_DELAY_MS);
+    await pool.query(
+      "INSERT INTO emails (evento_id, pago_id, cliente, monto) VALUES ($1, $2, $3, $4)",
+      [eventoId, Number(pagoId), cliente, Number(monto)]
+    );
+  } catch (err) {
+    // El email NO salió. Si ya habíamos anotado el evento como procesado, lo borramos:
+    // si no, un reenvío se descartaría como "duplicado" aunque el cliente nunca recibió nada.
+    if (marcado) await redis.del(`dedup:${eventoId}`).catch(() => {});
+    await registrarLog({ eventoId, pagoId, cliente, resultado: "error", dedup, ts: Date.now() }).catch(() => {});
+    console.error(`[worker] NO SE PUDO ENVIAR evento=${eventoId}: ${(err as Error).message}`);
+    throw err;
+  }
   await registrarLog({ eventoId, pagoId, cliente, resultado: "enviado", dedup, ts: Date.now() });
   console.log(`[worker] EMAIL ENVIADO evento=${eventoId} pago=${pagoId}`);
   await redis.xAck(STREAM, GRUPO, id);
@@ -124,6 +136,7 @@ async function main(): Promise<void> {
   await redis.connect();
   await bloqueante.connect();
   console.log("[worker] conectado a Redis y Postgres");
+  await pool.query(SQL_TABLA_EMAILS).catch((e) => console.warn("[worker] tabla emails:", e.message));
   await crearGrupo();
 
   // Heartbeat: cada 2 s refrescamos worker:heartbeat con TTL de 5 s.

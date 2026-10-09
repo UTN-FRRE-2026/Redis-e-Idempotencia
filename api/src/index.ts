@@ -1,6 +1,6 @@
 import express from "express";
 import { redis, connectRedis } from "./redis";
-import { pool } from "./db";
+import { pool, SQL_TABLA_EMAILS } from "./db";
 import { productosRouter } from "./routes/productos";
 import { pagosRouter } from "./routes/pagos";
 import { emailsRouter } from "./routes/emails";
@@ -41,6 +41,8 @@ app.use("/admin", adminRouter);
 
 async function main(): Promise<void> {
   await connectRedis();
+  // Si dos procesos la crean a la vez, uno puede fallar: no importa, la tabla queda creada.
+  await pool.query(SQL_TABLA_EMAILS).catch((e) => console.warn(`[${INSTANCE}] tabla emails:`, e.message));
   app.listen(PORT, () => console.log(`[${INSTANCE}] escuchando en el puerto ${PORT}`));
 }
 

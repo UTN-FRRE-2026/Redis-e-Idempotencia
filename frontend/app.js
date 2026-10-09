@@ -442,6 +442,19 @@ function dibujarComparacion() {
 
 /** Dispara el escenario elegido en el modo actual. */
 async function correrEscenario(tipo) {
+  // Mientras corre un escenario, los botones quedan deshabilitados: si se apretaran dos,
+  // sus filas se mezclarían en la misma línea de tiempo y en la billetera.
+  const botones = $$('.botones-escenario [data-escenario]');
+  if (botones.some((b) => b.disabled)) return;
+  botones.forEach((b) => (b.disabled = true));
+  try {
+    await correrEscenarioSinBloqueo(tipo);
+  } finally {
+    botones.forEach((b) => (b.disabled = false));
+  }
+}
+
+async function correrEscenarioSinBloqueo(tipo) {
   const modo = estado.modoIdem;
   const cliente = `cliente-${modo}-${Date.now()}`;
   const clave = nuevaClave();
@@ -509,10 +522,26 @@ $("#dedup-switch").addEventListener("change", async (e) => {
 
 $("#dedup-pagar").addEventListener("click", async () => {
   const cliente = `cliente-dedup-${Date.now()}`;
-  const r = await pagar("redis", nuevaClave(), cliente);
+  // Olvidamos el pago anterior YA: si no, durante el segundo que tarda el cobro,
+  // "La cola entrega el mensaje de nuevo" reenviaría el evento del pago viejo.
+  estado.dedup = { cliente: null, eventoId: null };
+  $("#dedup-reenviar").disabled = true;
+  $("#dedup-pagar").disabled = true;
+  $("#bandeja").innerHTML = "";
+  $("#dedup-cliente").textContent = "Cobrando el pago...";
+  let r;
+  try {
+    r = await pagar("redis", nuevaClave(), cliente);
+  } finally {
+    $("#dedup-pagar").disabled = false;
+  }
+  if (!r.body.eventoId) {
+    $("#dedup-cliente").textContent = `El pago no se pudo cobrar (${r.resultado}). ¿Están todas las luces en verde?`;
+    return;
+  }
   estado.dedup = { cliente, eventoId: r.body.eventoId };
   $("#dedup-cliente").textContent = `Pago de ${cliente} — esperando el comprobante del worker...`;
-  $("#dedup-reenviar").disabled = !r.body.eventoId;
+  $("#dedup-reenviar").disabled = false;
   animarArquitectura(r.instancia, ["redis", "postgres"]);
 });
 
@@ -530,6 +559,10 @@ async function pollBandeja() {
   if (!estado.dedup.cliente) return;
   try {
     const { res } = await llamarApi(`/emails?cliente=${encodeURIComponent(estado.dedup.cliente)}`);
+    if (!res.ok) {
+      $("#bandeja").innerHTML = `<p class="sub">No se pudo leer la bandeja (error ${res.status}). Revisar que exista la tabla emails.</p>`;
+      return;
+    }
     const { emails } = await res.json();
     // Contar cuántas veces aparece cada evento_id para marcar los duplicados.
     const conteo = {};
@@ -563,10 +596,11 @@ async function pollWorkerLog() {
     caja.innerHTML = log.length ? "" : '<p class="sub">El worker todavía no procesó nada.</p>';
     log.forEach((l) => {
       const enviado = l.resultado === "enviado";
+      const error = l.resultado === "error";
       const div = document.createElement("div");
       div.className = "log-fila";
       div.innerHTML = `
-        <span class="chip ${enviado ? "enviado" : "descartado"}">${enviado ? "ENVIADO" : "DUPLICADO DESCARTADO"}</span>
+        <span class="chip ${enviado ? "enviado" : error ? "rechazado" : "descartado"}">${enviado ? "ENVIADO" : error ? "ERROR: NO SE ENVIÓ" : "DUPLICADO DESCARTADO"}</span>
         <span class="log-detalle">evento ${String(l.eventoId).slice(0, 10)}… · pago ${l.pagoId}</span>`;
       caja.appendChild(div);
     });
@@ -635,7 +669,12 @@ $("#falla-reintento").addEventListener("click", async () => {
 //  10. REINICIAR DEMO
 // ════════════════════════════════════════════════════════════════════════════
 $("#btn-reiniciar").addEventListener("click", async () => {
-  await llamarApi("/admin/reset", { method: "POST" });
+  const { res } = await llamarApi("/admin/reset", { method: "POST" });
+  if (!res.ok) {
+    registrarUltimoPedido({ ruta: "POST /admin/reset", replica: "—", resultado: `ERROR ${res.status}: no se reinició`, ms: 0 });
+    alert("No se pudo reiniciar la demo en el servidor. Revisar las luces y la base de datos (tabla emails).");
+    return;
+  }
   // Limpiar el estado del panel.
   estado.historialCache = [];
   estado.comparacionModos = {};
